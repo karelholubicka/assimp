@@ -56,7 +56,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "IFCLoader.h"
 #include "STEPFileReader.h"
-
+#include "IFCSchema2x3Loader.h"
 #include "IFCSchema4Loader.h"
 #include "IFCUtil.h"
 
@@ -297,7 +297,7 @@ void IFCImporter::InternReadFile( const std::string& pFile, aiScene* pScene, IOS
 
     if (StepSchemaType::Schema2_3 == schemaType) {
         ConversionData2x3 conv( *db, proj->To<Schema_2x3::IfcProject>(), pScene, settings );
-        convertAsset2x3( conv, db.get(), pScene, pIOHandler );
+        IFCSchema2x3Loader::convertAsset2x3( conv, db.get(), pScene, pIOHandler );
     }
     else if (StepSchemaType::Schema4 == schemaType) {
         ConversionData4 conv( *db, proj->To<Schema_4::IfcProject>(), pScene, settings );
@@ -398,7 +398,6 @@ void IFCImporter::convertAsset2x3( ConversionData2x3 &conv, STEP::DB *db, aiScen
     if (!DefaultLogger::isNullLogger()) {
         LogDebug( (Formatter::format(), "STEP: evaluated ", db->GetEvaluatedObjectCount(), " object records") );
     }
-
 }
 
 void IFCImporter::convertAsset4( IFC::ConversionData4 &conv, STEP::DB *db, aiScene* pScene, IOSystem* pIOHandler ) {
@@ -972,7 +971,8 @@ void ProcessSpatialStructures( TConv & conv) {
         if(!prod) {
             continue;
         }
-        IFCImporter::LogDebug("looking at spatial structure `" + (prod->Name ? prod->Name.Get() : "unnamed") + "`" + (prod->ObjectType? " which is of type " + prod->ObjectType.Get():""));
+        IFCImporter::LogDebug("looking at spatial structure `" + (prod->Name ? prod->Name.Get() : "unnamed")
+            + "`" + (prod->ObjectType? " which is of type " + prod->ObjectType.Get():""));
 
         // the primary sites are referenced by an IFCRELAGGREGATES element which assigns them to the IFCPRODUCT
         const STEP::DB::RefMap& refs = conv.db.GetRefs();

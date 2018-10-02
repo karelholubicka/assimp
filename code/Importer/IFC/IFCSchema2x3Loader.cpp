@@ -344,7 +344,7 @@ namespace IFC {
     // ------------------------------------------------------------------------------------------------
     template<class TConv>
     inline
-        aiNode* ProcessSpatialStructure( aiNode* parent, const Schema_2x3::IfcProduct& el, TConv &conv, std::vector<TempOpening>* collect_openings = NULL )
+    aiNode* ProcessSpatialStructure( aiNode* parent, const Schema_2x3::IfcProduct& el, TConv &conv, std::vector<TempOpening>* collect_openings = NULL )
     {
         const STEP::DB::RefMap& refs = conv.db.GetRefs();
 
@@ -633,8 +633,7 @@ namespace IFC {
     }
 
 // ------------------------------------------------------------------------------------------------
-void MakeTreeRelative( aiNode* start, const aiMatrix4x4& combined )
-{
+void MakeTreeRelative( aiNode* start, const aiMatrix4x4& combined ) {
     // combined is the parent's absolute transformation matrix
     const aiMatrix4x4 old = start->mTransformation;
 
@@ -652,6 +651,52 @@ void MakeTreeRelative( aiNode* start, const aiMatrix4x4& combined )
 void MakeTreeRelative( ConversionData2x3& conv )
 {
     MakeTreeRelative( conv.out->mRootNode, IfcMatrix4() );
+}
+
+void IFCSchema2x3Loader::convertAsset2x3( ConversionData2x3 &conv, STEP::DB *db, aiScene* pScene, IOSystem* pIOHandler ) {
+    SetUnits( conv );
+    SetCoordinateSpace( conv );
+    ProcessSpatialStructures( conv );
+    MakeTreeRelative( conv );
+
+    // NOTE - this is a stress test for the importer, but it works only
+    // in a build with no entities disabled. See
+    //     scripts/IFCImporter/CPPGenerator.py
+    // for more information.
+#ifdef ASSIMP_IFC_TEST
+    db->EvaluateAll();
+#endif
+
+    // do final data copying
+    if (conv.meshes.size()) {
+        pScene->mNumMeshes = static_cast<unsigned int>(conv.meshes.size());
+        pScene->mMeshes = new aiMesh*[ pScene->mNumMeshes ]();
+        std::copy( conv.meshes.begin(), conv.meshes.end(), pScene->mMeshes );
+
+        // needed to keep the d'tor from burning us
+        conv.meshes.clear();
+    }
+
+    if (conv.materials.size()) {
+        pScene->mNumMaterials = static_cast<unsigned int>(conv.materials.size());
+        pScene->mMaterials = new aiMaterial*[ pScene->mNumMaterials ]();
+        std::copy( conv.materials.begin(), conv.materials.end(), pScene->mMaterials );
+
+        // needed to keep the d'tor from burning us
+        conv.materials.clear();
+    }
+
+    // apply world coordinate system (which includes the scaling to convert to meters and a -90 degrees rotation around x)
+    aiMatrix4x4 scale, rot;
+    aiMatrix4x4::Scaling( static_cast<aiVector3D>(IfcVector3( conv.len_scale )), scale );
+    aiMatrix4x4::RotationX( -AI_MATH_HALF_PI_F, rot );
+
+    pScene->mRootNode->mTransformation = rot * scale * conv.wcs * pScene->mRootNode->mTransformation;
+
+    // this must be last because objects are evaluated lazily as we process them
+    if (!DefaultLogger::isNullLogger()) {
+//        LogDebug( (Formatter::format(), "STEP: evaluated ", db->GetEvaluatedObjectCount(), " object records") );
+    }
 }
 
 }
