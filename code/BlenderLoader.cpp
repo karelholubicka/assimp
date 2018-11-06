@@ -1220,6 +1220,28 @@ aiLight* BlenderImporter::ConvertLight(const Scene& /*in*/, const Object* obj, c
     std::unique_ptr<aiLight> out(new aiLight());
     out->mName = obj->id.name+2;
 
+    float decay = lamp->dist;
+    switch (lamp->falloff_type)
+    {
+    case Lamp::FalloffType_Constant:
+        out->mAttenuationConstant = decay;
+        out->mAttenuationLinear = 0.0f;
+        out->mAttenuationQuadratic = 0.0f;
+        break;
+    case Lamp::FalloffType_InvLinear:
+        out->mAttenuationConstant = 0.0f;
+        out->mAttenuationLinear = 2.0f / decay;
+        out->mAttenuationQuadratic = 0.0f;
+        break;
+    case Lamp::FalloffType_InvSquare:
+        out->mAttenuationConstant = 0.0f;
+        out->mAttenuationLinear = 0.0f;
+        out->mAttenuationQuadratic = 2.0f / (decay * decay);
+        break;
+    default:
+        ai_assert(false);
+    }
+
     switch (lamp->type)
     {
         case Lamp::Type_Local:
@@ -1227,10 +1249,24 @@ aiLight* BlenderImporter::ConvertLight(const Scene& /*in*/, const Object* obj, c
             break;
         case Lamp::Type_Sun:
             out->mType = aiLightSource_DIRECTIONAL;
+            //override decay settings to match FBX importer - has no meaning for this lighttype anyway
+            out->mAttenuationConstant = decay;
+            out->mAttenuationLinear = 0.0f;
+            out->mAttenuationQuadratic = 0.0f;
 
             // blender orients directional lights as facing toward -z
             out->mDirection = aiVector3D(0.f, 0.f, -1.f);
-            out->mUp = aiVector3D(0.f, 1.f, 0.f);
+            break;
+
+        case Lamp::Type_Spot:
+            out->mType = aiLightSource_SPOT;
+
+            out->mAngleInnerCone = float((1.0-lamp->spotblend)*lamp->spotsize);
+            out->mAngleOuterCone = float(lamp->spotsize);
+//            out->mPosition = aiVector3D(lamp->position);
+
+            // blender orients directional lights as facing toward -z
+            out->mDirection = aiVector3D(0.f, 0.f, -1.f);
             break;
 
         case Lamp::Type_Area:
@@ -1245,16 +1281,16 @@ aiLight* BlenderImporter::ConvertLight(const Scene& /*in*/, const Object* obj, c
 
             // blender orients directional lights as facing toward -z
             out->mDirection = aiVector3D(0.f, 0.f, -1.f);
-            out->mUp = aiVector3D(0.f, 1.f, 0.f);
             break;
 
         default:
             break;
     }
-
+    out->mUp = aiVector3D(0.f, 1.f, 0.f);
     out->mColorAmbient = aiColor3D(lamp->r, lamp->g, lamp->b) * lamp->energy;
     out->mColorSpecular = aiColor3D(lamp->r, lamp->g, lamp->b) * lamp->energy;
     out->mColorDiffuse = aiColor3D(lamp->r, lamp->g, lamp->b) * lamp->energy;
+
     return out.release();
 }
 

@@ -313,11 +313,38 @@ void FBXConverter::ConvertLight( const Light& light, const std::string &orig_nam
     out_light->mColorDiffuse.b *= intensity;
 
     out_light->mColorSpecular = out_light->mColorDiffuse;
+    out_light->mColorAmbient = out_light->mColorDiffuse;
 
     //lights are defined along negative y direction
     out_light->mPosition = aiVector3D(0.0f);
     out_light->mDirection = aiVector3D(0.0f, -1.0f, 0.0f);
     out_light->mUp = aiVector3D(0.0f, 0.0f, -1.0f);
+
+    float decay = light.DecayStart();
+    switch (light.DecayType())
+    {
+    case Light::Decay_None:
+        out_light->mAttenuationConstant = decay;
+        out_light->mAttenuationLinear = 0.0f;
+        out_light->mAttenuationQuadratic = 0.0f;
+        break;
+    case Light::Decay_Linear:
+        out_light->mAttenuationConstant = 0.0f;
+        out_light->mAttenuationLinear = 2.0f / decay;
+        out_light->mAttenuationQuadratic = 0.0f;
+        break;
+    case Light::Decay_Quadratic:
+        out_light->mAttenuationConstant = 0.0f;
+        out_light->mAttenuationLinear = 0.0f;
+        out_light->mAttenuationQuadratic = 2.0f / (decay * decay);
+        break;
+    case Light::Decay_Cubic:
+        FBXImporter::LogWarn("cannot represent cubic attenuation, set to Quadratic");
+        out_light->mAttenuationQuadratic = 1.0f;
+        break;
+    default:
+        ai_assert(false);
+    }
 
     switch ( light.LightType() )
     {
@@ -336,39 +363,26 @@ void FBXConverter::ConvertLight( const Light& light, const std::string &orig_nam
         break;
 
     case Light::Type_Area:
-        FBXImporter::LogWarn( "cannot represent area light, set to UNDEFINED" );
-        out_light->mType = aiLightSource_UNDEFINED;
+        FBXImporter::LogWarn("cannot represent area light properly, setting size to 1.0");
+        out_light->mType = aiLightSource_AREA;
+        //but we have no size info, only if area is rectangle, or square,
+        // so next lines are for testing only:
+        if (light.AreaLightShape() == 0) {
+            out_light->mSize = aiVector2D(1.0f,1.0f); //square
+        }
+        else {
+            out_light->mSize = aiVector2D(0.7876f, 0.7876f); //circle/sphere
+        }
+        //override decay settings
+        out_light->mAttenuationConstant = 0.0f;
+        out_light->mAttenuationLinear = 0.0f;
+        out_light->mAttenuationQuadratic = 2.0f / (decay * decay);
+
         break;
 
     case Light::Type_Volume:
         FBXImporter::LogWarn( "cannot represent volume light, set to UNDEFINED" );
         out_light->mType = aiLightSource_UNDEFINED;
-        break;
-    default:
-        ai_assert( false );
-    }
-
-    float decay = light.DecayStart();
-    switch ( light.DecayType() )
-    {
-    case Light::Decay_None:
-        out_light->mAttenuationConstant = decay;
-        out_light->mAttenuationLinear = 0.0f;
-        out_light->mAttenuationQuadratic = 0.0f;
-        break;
-    case Light::Decay_Linear:
-        out_light->mAttenuationConstant = 0.0f;
-        out_light->mAttenuationLinear = 2.0f / decay;
-        out_light->mAttenuationQuadratic = 0.0f;
-        break;
-    case Light::Decay_Quadratic:
-        out_light->mAttenuationConstant = 0.0f;
-        out_light->mAttenuationLinear = 0.0f;
-        out_light->mAttenuationQuadratic = 2.0f / (decay * decay);
-        break;
-    case Light::Decay_Cubic:
-        FBXImporter::LogWarn( "cannot represent cubic attenuation, set to Quadratic" );
-        out_light->mAttenuationQuadratic = 1.0f;
         break;
     default:
         ai_assert( false );
